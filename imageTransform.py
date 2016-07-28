@@ -90,7 +90,7 @@ if __name__ == "__main__":
                "ghost borders - 4", "sharpness - 5", "smart borders - 6"
         while mode not in core:
             print(*menu, sep="\n")
-            mode = int(input("Enter your chose: "))
+            mode = int(input("Enter your command: "))
     else:
         mode = int(sys.argv[2])
 
