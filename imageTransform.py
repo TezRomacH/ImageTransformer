@@ -1,7 +1,8 @@
 import sys
 import time
+
+import math
 from PIL import Image
-from multiprocessing import *
 import numpy as np
 
 
@@ -13,7 +14,7 @@ class Profiler:
         print("Time: {:.3f} sec".format(time.time() - self._startTime))
 
 
-core = {
+cores = {
     0: np.array([[[0.111111111], [0.111111111], [0.111111111]],
                  [[0.111111111], [0.111111111], [0.111111111]],
                  [[0.111111111], [0.111111111], [0.111111111]]]),
@@ -39,8 +40,20 @@ core = {
                  [[0], [-1], [0]]])
 }
 
+def normalize(image_matrix, mode_255 = True):
+    res = []
+    if mode_255:
+        res = np.select([image_matrix < 0, image_matrix > 255], [0, 255], default=image_matrix)
+    else:
+        res = np.select([image_matrix < 0, image_matrix > 1], [0, 1], default=image_matrix)
+    return res
 
-def image_transform(image, transform):
+transforms = {
+    7: lambda x: normalize(x * 2.5),
+    8: lambda x: normalize(x * 0.3)
+}
+
+def image_transform_core(image, transform):
     img_main = Image.open(image)
 
     width = img_main.size[0]
@@ -56,7 +69,7 @@ def image_transform(image, transform):
         background.paste(img_main, mask=img_main.split()[3])
         pix = np.array(background)
 
-    _core = core[transform]
+    _core = cores[transform]
 
     for i in range(1, height - 1):
         for j in range(1, width - 1):
@@ -73,6 +86,35 @@ def image_transform(image, transform):
 
     return Image.fromarray(out)
 
+def image_transform(image, transform, with_normalization = True):
+    img_main = Image.open(image)
+    width = img_main.size[0]
+    height = img_main.size[1]
+
+    pix = np.array(img_main).astype(int)
+    out = np.zeros((height, width, 3), dtype=np.uint8)
+
+    if pix.shape[2] == 4:
+        background = Image.new("RGB", img_main.size, (255, 255, 255))
+        background.paste(img_main, mask=img_main.split()[3])
+        pix = np.array(background)
+
+    print("height =", height, "\nwidth =", width)
+
+    tr = transforms[transform]
+    if with_normalization:
+        out = RGB_1_to_255(tr(RGB_255_to_1(pix)))
+    else:
+        out = tr(pix)
+
+    return Image.fromarray(np.array(out, dtype=np.uint8))
+
+def RGB_255_to_1(image_array):
+    return np.array(image_array * 1/255)
+
+def RGB_1_to_255(image_array):
+    return np.array(image_array * 255)
+
 
 # Проверим, что программа запущена с консоли
 if __name__ == "__main__":
@@ -87,14 +129,22 @@ if __name__ == "__main__":
         # mode -- вариант преобразования
         mode = -1
         menu = "\nblur - 0", "hard borders - 1", \
-               "ghost borders - 4", "sharpness - 5", "smart borders - 6"
-        while mode not in core:
+               "ghost borders - 4", "sharpness - 5", "smart borders - 6", \
+               "lightness - 7, darkness - 8"
+        while (mode not in cores.keys()) or (mode not in transforms.keys()):
             print(*menu, sep="\n")
-            mode = int(input("Enter your command: "))
+            mode = int(input("Enter your chose: "))
     else:
         mode = int(sys.argv[2])
 
     p = Profiler()
-    new_image = image_transform(image_path, mode)
+    new_image = 0
+    if mode in transforms:
+        normaliz = True
+        if mode == 8:
+            normaliz = False
+        new_image = image_transform(image_path, mode, normaliz)
+    else:
+        new_image = image_transform_core(image_path, mode)
     p.print()
     new_image.save("new_file_mode" + str(mode) + ".png")
